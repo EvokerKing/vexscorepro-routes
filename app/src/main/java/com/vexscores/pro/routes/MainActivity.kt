@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -15,19 +16,25 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.vexscores.pro.routes.ui.ListScreen
+import com.vexscores.pro.routes.ui.RouteScreen
+import com.vexscores.pro.routes.ui.routes
 
 object AppDestinations {
 	const val LIST = "list of routes"
 }
 
 class MainActivity : ComponentActivity() {
+	lateinit var scheme: ColorScheme
+
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 
 		enableEdgeToEdge()
 		setContent {
+			scheme = if (isSystemInDarkTheme()) dynamicDarkColorScheme(applicationContext) else dynamicLightColorScheme(applicationContext)
+
 			MaterialTheme(
-				colorScheme = if (isSystemInDarkTheme()) dynamicDarkColorScheme(applicationContext) else dynamicLightColorScheme(applicationContext)
+				colorScheme = scheme
 			) {
 				Controller(this)
 			}
@@ -45,7 +52,13 @@ fun Controller(context: MainActivity) {
 		modifier = Modifier.fillMaxSize()
 	) {
 		composable(AppDestinations.LIST) {
-			ListScreen(navController)
+			ListScreen(navController, context)
+		}
+
+		routes.forEach { i ->
+			composable(i.key) {
+				RouteScreen(navController, i.key)
+			}
 		}
 	}
 }
