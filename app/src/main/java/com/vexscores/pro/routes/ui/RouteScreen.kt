@@ -1,39 +1,53 @@
 package com.vexscores.pro.routes.ui
 
-import android.util.Log
-import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowColumn
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.beust.klaxon.JsonArray
 import com.beust.klaxon.JsonObject
@@ -42,18 +56,21 @@ import com.vexscores.pro.routes.MainActivity
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.request.get
+import io.ktor.client.statement.HttpResponse
 import kotlinx.coroutines.launch
+import java.net.URLEncoder
 import java.time.Instant
 import java.time.ZoneId
-import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
-import java.time.temporal.ChronoUnit.DAYS
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RouteScreen(controller: NavController, context: MainActivity, item: String) {
+	val scope = rememberCoroutineScope()
+
 	Scaffold(
 		modifier = Modifier.fillMaxSize(),
 		topBar = {
@@ -66,85 +83,427 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 		}
 	) { innerPadding ->
 		if (item == "Events List") {
+			var filters = remember { mutableStateListOf("", "", "", "", "") }
 			val list = remember { mutableStateListOf<Map<String, Any?>?>(null) }
-			LaunchedEffect(Unit) {
-				val res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/events/list")
-	            val data = Parser.default().parse(StringBuilder(res.body<String>())) as JsonArray<*>
-	            list.clear()
-	            data.forEach {
-	                list += (it as JsonObject).toMap()
-	            }
+			val games = remember { mutableStateListOf<String?>(null) }
+			val states = listOf("Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming")
+			val levels = listOf("World", "National", "Regional", "Signature", "Other")
+			suspend fun update() {
+				list.clear()
+				list += null
+				var searchParams = ""
+				if (!filters[0].isEmpty()) {
+					searchParams += "&team=${URLEncoder.encode(filters[0], "UTF-8")}"
+				}
+				if (!filters[1].isEmpty()) {
+					searchParams += "&game=${URLEncoder.encode(filters[1], "UTF-8")}"
+				}
+				if (!filters[2].isEmpty()) {
+					searchParams += "&start=${URLEncoder.encode(filters[2].split(":")[0], "UTF-8")}"
+					searchParams += "&end=${URLEncoder.encode(filters[2].split(":")[1], "UTF-8")}"
+				}
+				if (!filters[3].isEmpty()) {
+					searchParams += "&region=${URLEncoder.encode(filters[3], "UTF-8")}"
+				}
+				if (!filters[4].isEmpty()) {
+					searchParams += "&level=${URLEncoder.encode(filters[4], "UTF-8")}"
+				}
+				var res: HttpResponse
+				try {
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/events/list?pages=1$searchParams")
+				} catch (_: HttpRequestTimeoutException) {
+					update()
+					return
+				}
+				val data = Parser.default().parse(StringBuilder(res.body<String>())) as JsonArray<*>
+				list.clear()
+				data.forEach {
+					list += (it as JsonObject).toMap()
+				}
+				try {
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/seasons")
+				} catch (_: HttpRequestTimeoutException) {
+					update()
+					return
+				}
+				val gameData = Parser.default().parse(StringBuilder(res.body<String>())) as JsonArray<*>
+				games.clear()
+				gameData.forEach {
+					var name = ((it as JsonObject).toMap()["name"]!! as String)
+					if (": " in name) {
+						name = name.split(": ")[1]
+					}
+					if (name !in games) {
+						games += name
+					}
+				}
 			}
-			if (list.isEmpty()) {
-				FlowColumn(
-					verticalArrangement = Arrangement.Center,
-					horizontalArrangement = Arrangement.Center,
-					modifier = Modifier
-						.fillMaxSize()
-						.padding(innerPadding)
-				) {
-					Text("No results returned")
-				}
-			} else if (list.first() == null) {
-				FlowColumn(
-					verticalArrangement = Arrangement.Center,
-					horizontalArrangement = Arrangement.Center,
-					modifier = Modifier
-						.fillMaxSize()
-						.padding(innerPadding)
-				) {
-					CircularProgressIndicator()
-				}
-			} else {
-				LazyColumn(modifier = Modifier
-					.fillMaxSize()
-					.padding(innerPadding)) {
-					list.forEach { item ->
-						item {
-							ElevatedCard(modifier = Modifier
-								.fillMaxWidth()
-								.padding(8.dp)) {
-								Text(
-									item?.get("id")?.toString() ?: "UNKNOWN ID",
-									style = MaterialTheme.typography.labelSmall,
-									color = Color(0xFF888888),
-									modifier = Modifier.padding(8.dp)
-								)
-								Text(
-									item?.get("name") as? String ?: "UNKNOWN NAME",
-									style = MaterialTheme.typography.headlineSmall,
-									modifier = Modifier.padding(start = 8.dp)
-								)
-								val start = Instant.parse(item?.get("start") as? String ?: "1970-01-01T00:00:00-05:00").atZone(ZoneId.systemDefault())
-								val end = Instant.parse(item?.get("end") as? String ?: "1970-01-01T00:00:00-05:00").atZone(ZoneId.systemDefault())
-								if (start == end) {
-									Text(
-										start.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.LONG)),
-										style = MaterialTheme.typography.bodySmall,
-										modifier = Modifier.padding(start = 8.dp)
-									)
-								} else {
-									Text(
-										"${start.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.LONG))} - ${end.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.LONG))}",
-										style = MaterialTheme.typography.bodySmall,
-										modifier = Modifier.padding(start = 8.dp)
+			LaunchedEffect(Unit) {
+				update()
+			}
+			var showTeamDialog = remember { mutableStateOf(false) }
+			var showGameMenu = remember { mutableStateOf(false) }
+			var showDateDialog = remember { mutableStateOf(false) }
+			var showStateMenu = remember { mutableStateOf(false) }
+			var showLevelMenu = remember { mutableStateOf(false) }
+			Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+				Row(modifier = Modifier.padding(4.dp).horizontalScroll(rememberScrollState())) {
+					InputChip(
+						onClick = {
+							showTeamDialog.value = true
+						},
+						label = { Text("Team Number${if (!filters[0].isEmpty()) ": ${filters[0]}" else ""}") },
+						selected = !filters[0].isEmpty(),
+						trailingIcon = {
+							if (!filters[0].isEmpty()) {
+								IconButton(
+									onClick = {
+										filters[0] = ""
+										scope.launch {
+											update()
+										}
+									},
+									modifier = Modifier.size(InputChipDefaults.IconSize)
+								) {
+									Icon(Icons.Rounded.Clear, "Clear")
+								}
+							}
+						},
+						modifier = Modifier.padding(4.dp)
+					)
+					Box {
+						InputChip(
+							onClick = {
+								showGameMenu.value = true
+							},
+							label = { Text("Game${if (!filters[1].isEmpty()) ": ${filters[1]}" else ""}") },
+							selected = !filters[1].isEmpty(),
+							trailingIcon = {
+								if (!filters[1].isEmpty()) {
+									IconButton(
+										onClick = {
+											filters[1] = ""
+											scope.launch {
+												update()
+											}
+										},
+										modifier = Modifier.size(InputChipDefaults.IconSize)
+									) {
+										Icon(Icons.Rounded.Clear, "Clear")
+									}
+								}
+							},
+							modifier = Modifier.padding(4.dp)
+						)
+						DropdownMenu(
+							expanded = showGameMenu.value,
+							onDismissRequest = { showGameMenu.value = false },
+							modifier = Modifier.height(500.dp).width(300.dp)
+						) {
+							if (games.first() == null) {
+								FlowColumn(
+									modifier = Modifier.fillMaxSize(),
+									horizontalArrangement = Arrangement.Center,
+									verticalArrangement = Arrangement.Center
+								) {
+									CircularProgressIndicator()
+								}
+							} else {
+								games.forEach {
+									DropdownMenuItem(
+										text = { Text(it!!) },
+										onClick = {
+											filters[1] = it!!
+											scope.launch {
+												update()
+											}
+											showGameMenu.value = false
+										}
 									)
 								}
-								Text(
-									(item?.get("season") as? Map<*, *>)?.get("name") as? String ?: "UNKNOWN SEASON",
-									style = MaterialTheme.typography.bodySmall,
-									modifier = Modifier.padding(start = 8.dp)
+							}
+						}
+					}
+					InputChip(
+						onClick = {
+							showDateDialog.value = true
+						},
+						label = { Text("Dates${if (!filters[2].isEmpty()) ": ${filters[2]}" else ""}") },
+						selected = !filters[2].isEmpty(),
+						trailingIcon = {
+							if (!filters[2].isEmpty()) {
+								IconButton(
+									onClick = {
+										filters[2] = ""
+										scope.launch {
+											update()
+										}
+									},
+									modifier = Modifier.size(InputChipDefaults.IconSize)
+								) {
+									Icon(Icons.Rounded.Clear, "Clear")
+								}
+							}
+						},
+						modifier = Modifier.padding(4.dp)
+					)
+					Box {
+						InputChip(
+							onClick = {
+								showStateMenu.value = true
+							},
+							label = { Text("State${if (!filters[3].isEmpty()) ": ${filters[3]}" else ""}") },
+							selected = !filters[3].isEmpty(),
+							trailingIcon = {
+								if (!filters[3].isEmpty()) {
+									IconButton(
+										onClick = {
+											filters[3] = ""
+											scope.launch {
+												update()
+											}
+										},
+										modifier = Modifier.size(InputChipDefaults.IconSize)
+									) {
+										Icon(Icons.Rounded.Clear, "Clear")
+									}
+								}
+							},
+							modifier = Modifier.padding(4.dp)
+						)
+						DropdownMenu(
+							expanded = showStateMenu.value,
+							onDismissRequest = { showStateMenu.value = false },
+							modifier = Modifier.height(500.dp).width(300.dp)
+						) {
+							states.forEach {
+								DropdownMenuItem(
+									text = { Text(it) },
+									onClick = {
+										filters[3] = it
+										scope.launch {
+											update()
+										}
+										showStateMenu.value = false
+									}
 								)
-								Text(
-									(item?.get("location") as? Map<*, *>)?.get("venue") as? String ?: "UNKNOWN LOCATION",
-									style = MaterialTheme.typography.bodySmall,
-									modifier = Modifier.padding(start = 8.dp)
+							}
+						}
+					}
+					Box {
+						InputChip(
+							onClick = {
+								showLevelMenu.value = true
+							},
+							label = { Text("Level${if (!filters[4].isEmpty()) ": ${filters[4]}" else ""}") },
+							selected = !filters[4].isEmpty(),
+							trailingIcon = {
+								if (!filters[4].isEmpty()) {
+									IconButton(
+										onClick = {
+											filters[4] = ""
+											scope.launch {
+												update()
+											}
+										},
+										modifier = Modifier.size(InputChipDefaults.IconSize)
+									) {
+										Icon(Icons.Rounded.Clear, "Clear")
+									}
+								}
+							},
+							modifier = Modifier.padding(4.dp)
+						)
+						DropdownMenu(
+							expanded = showLevelMenu.value,
+							onDismissRequest = { showLevelMenu.value = false },
+							modifier = Modifier.width(300.dp)
+						) {
+							levels.forEach {
+								DropdownMenuItem(
+									text = { Text(it) },
+									onClick = {
+										filters[4] = it
+										scope.launch {
+											update()
+										}
+										showLevelMenu.value = false
+									}
 								)
+							}
+						}
+					}
+				}
+				if (showTeamDialog.value) {
+					var current = remember { mutableStateOf(filters[0]) }
+					Dialog(
+						onDismissRequest = {
+							showTeamDialog.value = false
+						}
+					) {
+						Card(
+							modifier = Modifier.fillMaxWidth().height(200.dp),
+							shape = RoundedCornerShape(16.dp)
+						) {
+							FlowColumn(
+								modifier = Modifier.fillMaxSize(),
+								verticalArrangement = Arrangement.SpaceEvenly
+							) {
 								Text(
-									if (item?.get("awards_finalized") as? Boolean == true) { "Event Done" } else if (item?.get("awards_finalized") as? Boolean == false) { "Event Ongoing or Upcoming" } else { "UNKNOWN FINALIZED STATE" },
-									style = MaterialTheme.typography.titleMedium,
-									modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+									"Enter Team Number",
+									modifier = Modifier.align(Alignment.CenterHorizontally),
+									style = MaterialTheme.typography.headlineSmall
 								)
+								OutlinedTextField(
+									value = current.value,
+									onValueChange = { new: String ->
+										if (new.matches(Regex("[a-zA-Z0-9]{0,6}"))) {
+											current.value = new.uppercase()
+										}
+									},
+									label = { Text("Team Number") },
+									modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
+								)
+								Row(
+									modifier = Modifier.align(Alignment.End).padding(horizontal = 16.dp)
+								) {
+									TextButton(
+										onClick = {
+											showTeamDialog.value = false
+										}
+									) {
+										Text("Dismiss")
+									}
+									TextButton(
+										onClick = {
+											filters[0] = current.value
+											scope.launch {
+												update()
+											}
+											showTeamDialog.value = false
+										},
+										enabled = current.value.matches(Regex("^([a-zA-Z]{1,5})$|^([0-9]{1,5}[a-zA-z])$"))
+									) {
+										Text("Confirm")
+									}
+								}
+							}
+						}
+					}
+				}
+				if (showDateDialog.value) {
+					val current = rememberDateRangePickerState()
+					DatePickerDialog(
+						onDismissRequest = {
+							showDateDialog.value = false
+						},
+						confirmButton = {
+							TextButton(
+								onClick = {
+									current.selectedStartDateMillis ?: return@TextButton
+									current.selectedEndDateMillis ?: return@TextButton
+									val start = Instant.ofEpochMilli(current.selectedStartDateMillis!!.toLong()).atZone(ZoneId.systemDefault())
+									val end = Instant.ofEpochMilli(current.selectedEndDateMillis!!.toLong()).atZone(ZoneId.systemDefault())
+									filters[2] = "${start.year}-${start.monthValue}-${start.dayOfMonth}:${end.year}-${end.monthValue}-${end.dayOfMonth}"
+									scope.launch {
+										update()
+									}
+									showDateDialog.value = false
+								},
+								enabled = current.selectedStartDateMillis != null && current.selectedEndDateMillis != null
+							) {
+								Text("Confirm")
+							}
+						},
+						dismissButton = {
+							TextButton(
+								onClick = {
+									showDateDialog.value = false
+								}
+							) {
+								Text("Dismiss")
+							}
+						}
+					) {
+						DateRangePicker(
+							state = current,
+							title = {
+								Text("Select date range")
+							},
+							showModeToggle = false,
+							modifier = Modifier.fillMaxWidth().height(500.dp).padding(16.dp)
+						)
+					}
+				}
+				if (list.isEmpty()) {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("No results returned")
+					}
+				} else if (list.first() == null) {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						CircularProgressIndicator()
+					}
+				} else {
+					LazyColumn(modifier = Modifier.fillMaxSize()) {
+						list.forEach { item ->
+							item {
+								ElevatedCard(modifier = Modifier
+									.fillMaxWidth()
+									.padding(8.dp)) {
+									Text(
+										item?.get("id")?.toString() ?: "UNKNOWN ID",
+										style = MaterialTheme.typography.labelSmall,
+										color = Color(0xFF888888),
+										modifier = Modifier.padding(8.dp)
+									)
+									Text(
+										item?.get("name") as? String ?: "UNKNOWN NAME",
+										style = MaterialTheme.typography.headlineSmall,
+										modifier = Modifier.padding(start = 8.dp)
+									)
+									val start = Instant.parse(item?.get("start") as? String ?: "1970-01-01T00:00:00-05:00").atZone(ZoneId.systemDefault())
+									val end = Instant.parse(item?.get("end") as? String ?: "1970-01-01T00:00:00-05:00").atZone(ZoneId.systemDefault())
+									if (start == end) {
+										Text(
+											start.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.LONG)),
+											style = MaterialTheme.typography.bodySmall,
+											modifier = Modifier.padding(start = 8.dp)
+										)
+									} else {
+										Text(
+											"${start.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.LONG))} - ${end.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.LONG))}",
+											style = MaterialTheme.typography.bodySmall,
+											modifier = Modifier.padding(start = 8.dp)
+										)
+									}
+									Text(
+										(item?.get("season") as? Map<*, *>)?.get("name") as? String ?: "UNKNOWN SEASON",
+										style = MaterialTheme.typography.bodySmall,
+										modifier = Modifier.padding(start = 8.dp)
+									)
+									Text(
+										(item?.get("location") as? Map<*, *>)?.get("venue") as? String ?: "UNKNOWN LOCATION",
+										style = MaterialTheme.typography.bodySmall,
+										modifier = Modifier.padding(start = 8.dp)
+									)
+									Text(
+										if (item?.get("awards_finalized") as? Boolean == true) "Event Done" else if (item?.get("awards_finalized") as? Boolean == false) "Event Ongoing or Upcoming" else "UNKNOWN FINALIZED STATE",
+										style = MaterialTheme.typography.titleMedium,
+										modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+									)
+								}
 							}
 						}
 					}
