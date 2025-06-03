@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Clear
@@ -27,6 +28,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
@@ -40,13 +42,19 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.beust.klaxon.JsonArray
@@ -146,8 +154,12 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 			var showDateDialog = remember { mutableStateOf(false) }
 			var showStateMenu = remember { mutableStateOf(false) }
 			var showLevelMenu = remember { mutableStateOf(false) }
-			Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-				Row(modifier = Modifier.padding(4.dp).horizontalScroll(rememberScrollState())) {
+			Column(modifier = Modifier
+				.fillMaxSize()
+				.padding(innerPadding)) {
+				Row(modifier = Modifier
+					.padding(4.dp)
+					.horizontalScroll(rememberScrollState())) {
 					InputChip(
 						onClick = {
 							showTeamDialog.value = true
@@ -198,7 +210,9 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 						DropdownMenu(
 							expanded = showGameMenu.value,
 							onDismissRequest = { showGameMenu.value = false },
-							modifier = Modifier.height(500.dp).width(300.dp)
+							modifier = Modifier
+								.height(500.dp)
+								.width(300.dp)
 						) {
 							if (games.first() == null) {
 								FlowColumn(
@@ -274,7 +288,9 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 						DropdownMenu(
 							expanded = showStateMenu.value,
 							onDismissRequest = { showStateMenu.value = false },
-							modifier = Modifier.height(500.dp).width(300.dp)
+							modifier = Modifier
+								.height(500.dp)
+								.width(300.dp)
 						) {
 							states.forEach {
 								DropdownMenuItem(
@@ -342,7 +358,9 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 						}
 					) {
 						Card(
-							modifier = Modifier.fillMaxWidth().height(200.dp),
+							modifier = Modifier
+								.fillMaxWidth()
+								.height(200.dp),
 							shape = RoundedCornerShape(16.dp)
 						) {
 							FlowColumn(
@@ -362,10 +380,14 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 										}
 									},
 									label = { Text("Team Number") },
-									modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
+									modifier = Modifier
+										.padding(horizontal = 16.dp)
+										.fillMaxWidth()
 								)
 								Row(
-									modifier = Modifier.align(Alignment.End).padding(horizontal = 16.dp)
+									modifier = Modifier
+										.align(Alignment.End)
+										.padding(horizontal = 16.dp)
 								) {
 									TextButton(
 										onClick = {
@@ -431,7 +453,10 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 								Text("Select date range")
 							},
 							showModeToggle = false,
-							modifier = Modifier.fillMaxWidth().height(500.dp).padding(16.dp)
+							modifier = Modifier
+								.fillMaxWidth()
+								.height(500.dp)
+								.padding(16.dp)
 						)
 					}
 				}
@@ -504,6 +529,193 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 										modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
 									)
 								}
+							}
+						}
+					}
+				}
+			}
+		} else if (item == "Event Info") {
+			var event = remember { mutableStateOf("") }
+			var info = remember { mutableStateMapOf<Any?, Any?>(null to null) }
+			suspend fun update() {
+				if (event.value.isEmpty()) { return }
+				info.clear()
+				info.put("loading", null)
+				val res: HttpResponse
+				try {
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/events/info?id=${URLEncoder.encode(event.value, "UTF-8")}")
+				} catch (_: HttpRequestTimeoutException) {
+					update()
+					return
+				}
+				val data = Parser.default().parse(StringBuilder(res.body<String>())) as JsonObject
+				info.clear()
+				info.putAll(data.toMap() as Map<*, *>)
+			}
+			Column(modifier = Modifier
+				.fillMaxSize()
+				.padding(innerPadding)) {
+				OutlinedTextField(
+					value = event.value,
+					onValueChange = { new: String ->
+						if (new.matches(Regex("[0-9]{0,6}"))) {
+							event.value = new
+							scope.launch {
+								update()
+							}
+						}
+					},
+					label = { Text("Event ID") },
+					modifier = Modifier
+						.padding(horizontal = 16.dp)
+						.fillMaxWidth(),
+					keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+				)
+				if (info.keys.first() == null) {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Type in an event ID to get the info of it")
+					}
+				} else if (info.get("message") == "The event could not be found.") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Event could not be found")
+					}
+				} else if (info.keys.first() == "loading") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						CircularProgressIndicator()
+					}
+				} else {
+					Column(modifier = Modifier
+						.fillMaxSize()
+						.padding(8.dp)) {
+						Text(
+							info["name"] as String,
+							style = MaterialTheme.typography.headlineLarge,
+							modifier = Modifier
+								.padding(8.dp)
+								.fillMaxWidth()
+								.padding(top = 16.dp, bottom = 32.dp),
+							textAlign = TextAlign.Center
+						)
+						Text(
+							if (info["ongoing"] as Boolean) "Event Ongoing" else if (info["awards_finalized"] as Boolean) "Event Finalized" else "Unknown Event State",
+							style = MaterialTheme.typography.bodyLarge,
+							modifier = Modifier.align(Alignment.CenterHorizontally)
+						)
+						ElevatedCard(modifier = Modifier.padding(16.dp)) {
+							FlowColumn(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+								Text(
+									"Competition:",
+									style = MaterialTheme.typography.titleMedium
+								)
+								Text(
+									(info["program"] as Map<*, *>)["name"] as String,
+									style = MaterialTheme.typography.titleLarge,
+									modifier = Modifier.fillMaxWidth(),
+									textAlign = TextAlign.Center
+								)
+								Text(
+									((info["season"] as Map<*, *>)["name"] as String).split(": ")[1],
+									style = MaterialTheme.typography.titleLarge,
+									modifier = Modifier.fillMaxWidth(),
+									textAlign = TextAlign.Center
+								)
+							}
+						}
+						Text(
+							"Level: ${info["level"] as String}",
+							style = MaterialTheme.typography.bodyLarge,
+							modifier = Modifier.align(Alignment.CenterHorizontally)
+						)
+						ElevatedCard(modifier = Modifier.padding(16.dp)) {
+							FlowColumn(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+								Text(
+									"Location:",
+									style = MaterialTheme.typography.titleMedium
+								)
+								Text(
+									(info["location"] as Map<*, *>)["venue"] as String,
+									style = MaterialTheme.typography.titleLarge,
+									modifier = Modifier.fillMaxWidth(),
+									textAlign = TextAlign.Center
+								)
+								Text(
+									(info["location"] as Map<*, *>)["address_1"] as String,
+									style = MaterialTheme.typography.titleLarge,
+									modifier = Modifier.fillMaxWidth(),
+									textAlign = TextAlign.Center
+								)
+								if ((info["location"] as Map<*, *>)["address_2"] != null) {
+									Text(
+										(info["location"] as Map<*, *>)["address_2"] as String,
+										style = MaterialTheme.typography.titleLarge,
+										modifier = Modifier.fillMaxWidth(),
+										textAlign = TextAlign.Center
+									)
+								}
+								Text(
+									"${(info["location"] as Map<*, *>)["city"] as String}, ${(info["location"] as Map<*, *>)["region"] as String} ${(info["location"] as Map<*, *>)["postcode"] as String}",
+									style = MaterialTheme.typography.titleLarge,
+									modifier = Modifier.fillMaxWidth(),
+									textAlign = TextAlign.Center
+								)
+								Text(
+									(info["location"] as Map<*, *>)["country"] as String,
+									style = MaterialTheme.typography.titleLarge,
+									modifier = Modifier.fillMaxWidth(),
+									textAlign = TextAlign.Center
+								)
+							}
+						}
+						val start = Instant.parse(info["start"] as String).atZone(ZoneId.systemDefault())
+						val end = Instant.parse(info["end"] as String).atZone(ZoneId.systemDefault())
+						if (start == end) {
+							Text(
+								start.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)),
+								style = MaterialTheme.typography.bodyLarge,
+								modifier = Modifier.align(Alignment.CenterHorizontally)
+							)
+						} else {
+							Text(
+								"${start.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM))} - ${end.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM))}",
+								style = MaterialTheme.typography.bodyLarge,
+								modifier = Modifier.align(Alignment.CenterHorizontally)
+							)
+						}
+						ElevatedCard(modifier = Modifier.padding(16.dp)) {
+							FlowColumn(modifier = Modifier
+								.padding(16.dp)
+								.fillMaxWidth()) {
+								Text(
+									"Divisions:",
+									style = MaterialTheme.typography.titleMedium
+								)
+								(info["divisions"] as List<*>).forEach {
+									Text(
+										"${(it as Map<*, *>)["id"] as Int}: ${it["name"] as String}",
+										style = MaterialTheme.typography.titleLarge,
+										modifier = Modifier.fillMaxWidth(),
+										textAlign = TextAlign.Center
+									)
+								}
+
 							}
 						}
 					}
