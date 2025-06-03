@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -28,10 +29,12 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.InputChipDefaults
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -616,7 +619,9 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 							modifier = Modifier.align(Alignment.CenterHorizontally)
 						)
 						ElevatedCard(modifier = Modifier.padding(16.dp)) {
-							FlowColumn(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+							FlowColumn(modifier = Modifier
+								.padding(16.dp)
+								.fillMaxWidth()) {
 								Text(
 									"Competition:",
 									style = MaterialTheme.typography.titleMedium
@@ -641,7 +646,9 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 							modifier = Modifier.align(Alignment.CenterHorizontally)
 						)
 						ElevatedCard(modifier = Modifier.padding(16.dp)) {
-							FlowColumn(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+							FlowColumn(modifier = Modifier
+								.padding(16.dp)
+								.fillMaxWidth()) {
 								Text(
 									"Location:",
 									style = MaterialTheme.typography.titleMedium
@@ -712,6 +719,97 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 									)
 								}
 
+							}
+						}
+					}
+				}
+			}
+		} else if (item == "Event Teams") {
+			var event = remember { mutableStateOf("") }
+			var teams = remember { mutableStateListOf<Any?>(null) }
+			suspend fun update() {
+				if (event.value.isEmpty()) { return }
+				teams.clear()
+				teams += "loading"
+				val res: HttpResponse
+				try {
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/events/teams?id=${URLEncoder.encode(event.value, "UTF-8")}")
+				} catch (_: HttpRequestTimeoutException) {
+					update()
+					return
+				}
+				if (res.status.value == 500) {
+					teams.clear()
+					teams += "not found"
+					return
+				}
+				val data = Parser.default().parse(StringBuilder(res.body<String>())) as JsonArray<*>
+				teams.clear()
+				data.forEach {
+					teams += it
+				}
+			}
+			Column(modifier = Modifier
+				.fillMaxSize()
+				.padding(innerPadding)) {
+				OutlinedTextField(
+					value = event.value,
+					onValueChange = { new: String ->
+						if (new.matches(Regex("[0-9]{0,6}"))) {
+							event.value = new
+							scope.launch {
+								update()
+							}
+						}
+					},
+					label = { Text("Event ID") },
+					modifier = Modifier
+						.padding(horizontal = 16.dp)
+						.fillMaxWidth(),
+					keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+				)
+				if (teams.first() == null) {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Type in an event ID to get the info of it")
+					}
+				} else if (teams.first() == "not found") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Event could not be found")
+					}
+				} else if (teams.first() == "loading") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						CircularProgressIndicator()
+					}
+				} else {
+					LazyColumn(modifier = Modifier.padding(top = 16.dp)) {
+						teams.forEachIndexed { index, team ->
+							item {
+								ListItem(
+									headlineContent = { Text("${(team as JsonObject)["number"] as String} - ${team["team_name"] as String}") },
+									supportingContent = { Text("${(team as JsonObject)["organization"] as String} (${(team["location"] as JsonObject)["city"] as String}, ${(team["location"] as JsonObject)["region"] as String})") },
+									trailingContent = { Text(((team as JsonObject)["id"] as Integer).toString()) }
+								)
+								if (index != teams.size) {
+									HorizontalDivider()
+								}
 							}
 						}
 					}
