@@ -28,7 +28,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
@@ -46,15 +45,12 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.beust.klaxon.JsonArray
@@ -581,7 +577,7 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 					) {
 						Text("Type in an event ID to get the info of it")
 					}
-				} else if (info.get("message") == "The event could not be found.") {
+				} else if (info["message"] == "The event could not be found.") {
 					FlowColumn(
 						verticalArrangement = Arrangement.Center,
 						horizontalArrangement = Arrangement.Center,
