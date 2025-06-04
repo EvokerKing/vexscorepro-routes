@@ -50,7 +50,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.capitalize
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -59,7 +58,6 @@ import androidx.navigation.NavController
 import com.beust.klaxon.JsonArray
 import com.beust.klaxon.JsonObject
 import com.beust.klaxon.Parser
-import com.vexscores.pro.routes.MainActivity
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -76,7 +74,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RouteScreen(controller: NavController, context: MainActivity, item: String) {
+fun RouteScreen(controller: NavController, item: String) {
 	val scope = rememberCoroutineScope()
 
 	Scaffold(
@@ -818,7 +816,6 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 			}
 		} else if (item == "Event Skills") {
 			var event = remember { mutableStateOf("") }
-			var team = remember { mutableStateOf("") }
 			var runs = remember { mutableStateListOf<Any?>(null) }
 			suspend fun update() {
 				if (event.value.isEmpty()) { return }

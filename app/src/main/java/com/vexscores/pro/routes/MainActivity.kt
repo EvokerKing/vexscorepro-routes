@@ -57,7 +57,7 @@ fun Controller(context: MainActivity) {
 
 		routes.forEach { i ->
 			composable(i.key) {
-				RouteScreen(navController, context, i.key)
+				RouteScreen(navController, i.key)
 			}
 		}
 	}
