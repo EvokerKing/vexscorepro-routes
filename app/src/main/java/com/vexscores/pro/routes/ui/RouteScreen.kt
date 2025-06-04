@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -51,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.capitalize
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -72,6 +72,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -776,7 +777,7 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 							.fillMaxSize()
 							.padding(innerPadding)
 					) {
-						Text("Type in an event ID to get the info of it")
+						Text("Type in an event ID to get the teams who competed in it")
 					}
 				} else if (teams.first() == "not found") {
 					FlowColumn(
@@ -808,6 +809,100 @@ fun RouteScreen(controller: NavController, context: MainActivity, item: String) 
 									trailingContent = { Text(((team as JsonObject)["id"] as Integer).toString()) }
 								)
 								if (index != teams.size) {
+									HorizontalDivider()
+								}
+							}
+						}
+					}
+				}
+			}
+		} else if (item == "Event Skills") {
+			var event = remember { mutableStateOf("") }
+			var team = remember { mutableStateOf("") }
+			var runs = remember { mutableStateListOf<Any?>(null) }
+			suspend fun update() {
+				if (event.value.isEmpty()) { return }
+				runs.clear()
+				runs += "loading"
+				val res: HttpResponse
+				try {
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/events/skills?id=${URLEncoder.encode(event.value, "UTF-8")}")
+				} catch (_: HttpRequestTimeoutException) {
+					update()
+					return
+				}
+				if (res.status.value == 500) {
+					runs.clear()
+					runs += "not found"
+					return
+				}
+				val data = Parser.default().parse(StringBuilder(res.body<String>())) as JsonArray<*>
+				runs.clear()
+				data.forEach {
+					runs += it
+				}
+			}
+			Column(modifier = Modifier
+				.fillMaxSize()
+				.padding(innerPadding)) {
+				OutlinedTextField(
+					value = event.value,
+					onValueChange = { new: String ->
+						if (new.matches(Regex("[0-9]{0,6}"))) {
+							event.value = new
+							scope.launch {
+								update()
+							}
+						}
+					},
+					label = { Text("Event ID") },
+					modifier = Modifier
+						.padding(horizontal = 16.dp)
+						.fillMaxWidth(),
+					keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+				)
+				if (runs.first() == null) {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Type in an event ID to get the skills runs from it")
+					}
+				} else if (runs.first() == "not found") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Event could not be found")
+					}
+				} else if (runs.first() == "loading") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						CircularProgressIndicator()
+					}
+				} else {
+					LazyColumn(modifier = Modifier.padding(top = 16.dp)) {
+						runs.forEachIndexed { index, run ->
+							item {
+								val attempts = (run as JsonObject)["attempts"] as Int
+								ListItem(
+									headlineContent = { Text((run["team"] as JsonObject)["name"] as String) },
+									supportingContent = { Text("${(run["type"] as String).capitalize(Locale.getDefault())} - $attempts attempt${if (attempts != 1) "s" else ""}") },
+									trailingContent = { Text("${run["score"] as Int} points") },
+									leadingContent = { Text("#${run["rank"] as Int}") }
+								)
+								if (index != runs.size) {
 									HorizontalDivider()
 								}
 							}
