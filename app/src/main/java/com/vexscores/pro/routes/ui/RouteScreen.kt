@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Clear
@@ -901,6 +902,109 @@ fun RouteScreen(controller: NavController, item: String) {
 								)
 								if (index != runs.size) {
 									HorizontalDivider()
+								}
+							}
+						}
+					}
+				}
+			}
+		} else if (item == "Event Awards") {
+			var event = remember { mutableStateOf("") }
+			var awards = remember { mutableStateListOf<Any?>(null) }
+			suspend fun update() {
+				if (event.value.isEmpty()) {
+					return
+				}
+				awards.clear()
+				awards += "loading"
+				val res: HttpResponse
+				try {
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/events/awards?id=${URLEncoder.encode(event.value, "UTF-8")}")
+				} catch (_: HttpRequestTimeoutException) {
+					update()
+					return
+				}
+				val body = res.body<String>()
+				if (body.isEmpty()) {
+					awards.clear()
+					awards += "not found"
+					return
+				}
+				val data = Parser.default().parse(StringBuilder(body)) as JsonArray<*>
+				awards.clear()
+				data.forEach {
+					awards += it
+				}
+			}
+			Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+				OutlinedTextField(
+					value = event.value,
+					onValueChange = { new: String ->
+						if (new.matches(Regex("[0-9]{0,6}"))) {
+							event.value = new
+							scope.launch {
+								update()
+							}
+						}
+					},
+					label = { Text("Event ID") },
+					modifier = Modifier
+						.padding(horizontal = 16.dp)
+						.fillMaxWidth(),
+					keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+				)
+				if (awards.first() == null) {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Type in an event ID to get the awards from it")
+					}
+				} else if (awards.first() == "not found") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Event could not be found")
+					}
+				} else if (awards.first() == "loading") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						CircularProgressIndicator()
+					}
+				} else {
+					Column(modifier = Modifier.padding(top = 16.dp).verticalScroll(rememberScrollState())) {
+						awards.forEach {
+							it as? JsonObject ?: return@forEach
+							ElevatedCard(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+								Text(
+									it["title"] as String,
+									style = MaterialTheme.typography.headlineSmall,
+									modifier = Modifier.padding(8.dp)
+								)
+								Text(
+									"Awarded to:",
+									style = MaterialTheme.typography.titleMedium,
+									modifier = Modifier.padding(start = 8.dp)
+								)
+								(it["teamWinners"] as JsonArray<*>).forEach { team ->
+									team as? JsonObject ?: return@forEach
+									Text(
+										"${(team["team"] as JsonObject)["name"] as String} - ${(team["division"] as JsonObject)["name"] as String}",
+										style = MaterialTheme.typography.titleLarge,
+										modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+									)
 								}
 							}
 						}
