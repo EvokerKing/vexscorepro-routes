@@ -936,7 +936,9 @@ fun RouteScreen(controller: NavController, item: String) {
 					awards += it
 				}
 			}
-			Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+			Column(modifier = Modifier
+				.fillMaxSize()
+				.padding(innerPadding)) {
 				OutlinedTextField(
 					value = event.value,
 					onValueChange = { new: String ->
@@ -984,10 +986,14 @@ fun RouteScreen(controller: NavController, item: String) {
 						CircularProgressIndicator()
 					}
 				} else {
-					Column(modifier = Modifier.padding(top = 16.dp).verticalScroll(rememberScrollState())) {
+					Column(modifier = Modifier
+						.padding(top = 16.dp)
+						.verticalScroll(rememberScrollState())) {
 						awards.forEach {
 							it as? JsonObject ?: return@forEach
-							ElevatedCard(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+							ElevatedCard(modifier = Modifier
+								.fillMaxWidth()
+								.padding(8.dp)) {
 								Text(
 									it["title"] as String,
 									style = MaterialTheme.typography.headlineSmall,
@@ -1006,6 +1012,135 @@ fun RouteScreen(controller: NavController, item: String) {
 										modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
 									)
 								}
+							}
+						}
+					}
+				}
+			}
+		} else if (item == "Event Division Rankings") {
+			var event = remember { mutableStateOf("") }
+			var division = remember { mutableStateOf("") }
+			var teams = remember { mutableStateListOf<Any?>(null) }
+			suspend fun update() {
+				if (event.value.isEmpty() || division.value.isEmpty()) {
+					return
+				}
+				teams.clear()
+				teams += "loading"
+				val res: HttpResponse
+				try {
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/events/rankings?id=${URLEncoder.encode(event.value, "UTF-8")}&div=${URLEncoder.encode(division.value, "UTF-8")}")
+				} catch (_: HttpRequestTimeoutException) {
+					update()
+					return
+				}
+				if (res.status.value == 500) {
+					teams.clear()
+					teams += "not found"
+					return
+				}
+				val data = Parser.default().parse(StringBuilder(res.body<String>())) as JsonArray<*>
+				if (data.isEmpty()) {
+					teams.clear()
+					teams += "div not found"
+					return
+				}
+				teams.clear()
+				data.forEach {
+					teams += it
+				}
+				teams.reverse()
+			}
+			Column(modifier = Modifier
+				.fillMaxSize()
+				.padding(innerPadding)) {
+				Row {
+					OutlinedTextField(
+						value = event.value,
+						onValueChange = { new: String ->
+							if (new.matches(Regex("[0-9]{0,6}"))) {
+								event.value = new
+								scope.launch {
+									update()
+								}
+							}
+						},
+						label = { Text("Event ID") },
+						modifier = Modifier
+							.padding(horizontal = 16.dp)
+							.fillMaxWidth(0.6f),
+						keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+					)
+					OutlinedTextField(
+						value = division.value,
+						onValueChange = { new: String ->
+							if (new.matches(Regex("[0-9]{0,6}"))) {
+								division.value = new
+								scope.launch {
+									update()
+								}
+							}
+						},
+						label = { Text("Division ID") },
+						modifier = Modifier
+							.padding(horizontal = 16.dp)
+							.fillMaxWidth(),
+						keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+					)
+				}
+				if (teams.first() == null) {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Type in an event and division ID to get the rankings from it")
+					}
+				} else if (teams.first() == "not found") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Event could not be found")
+					}
+				} else if (teams.first() == "div not found") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Division could not be found")
+					}
+				} else if (teams.first() == "loading") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						CircularProgressIndicator()
+					}
+				} else {
+					Column(modifier = Modifier
+						.padding(top = 16.dp)
+						.verticalScroll(rememberScrollState())) {
+						teams.forEachIndexed { index, team ->
+							team as? JsonObject ?: return@forEachIndexed
+							ListItem(
+								headlineContent = { Text("${(team["team"] as JsonObject)["name"]} (${team["wins"] as Int}-${team["losses"] as Int}-${team["ties"] as Int})") },
+								supportingContent = { Text("${team["wp"] as Int} WPs - ${team["ap"] as Int} APs - ${team["sp"] as Int} SPs") },
+								leadingContent = { Text((team["rank"] as Int).toString()) }
+							)
+							if (index + 1 != teams.size) {
+								HorizontalDivider()
 							}
 						}
 					}
