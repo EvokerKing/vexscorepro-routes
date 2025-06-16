@@ -1,10 +1,12 @@
 package com.vexscores.pro.routes.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowColumn
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
@@ -1141,6 +1144,205 @@ fun RouteScreen(controller: NavController, item: String) {
 							)
 							if (index + 1 != teams.size) {
 								HorizontalDivider()
+							}
+						}
+					}
+				}
+			}
+		} else if (item == "Event Division Matches") {
+			var event = remember { mutableStateOf("") }
+			var division = remember { mutableStateOf("") }
+			var matches = remember { mutableStateListOf<Any?>(null) }
+			suspend fun update() {
+				if (event.value.isEmpty() || division.value.isEmpty()) {
+					return
+				}
+				matches.clear()
+				matches += "loading"
+				val res: HttpResponse
+				try {
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/events/matches?id=${URLEncoder.encode(event.value, "UTF-8")}&div=${URLEncoder.encode(division.value, "UTF-8")}")
+				} catch (_: HttpRequestTimeoutException) {
+					update()
+					return
+				}
+				if (res.status.value == 500) {
+					matches.clear()
+					matches += "not found"
+					return
+				}
+				val data = Parser.default().parse(StringBuilder(res.body<String>())) as JsonArray<*>
+				if (data.isEmpty()) {
+					matches.clear()
+					matches += "div not found"
+					return
+				}
+				matches.clear()
+				data.forEach {
+					matches += it
+				}
+				matches.reverse()
+			}
+			Column(modifier = Modifier
+				.fillMaxSize()
+				.padding(innerPadding)) {
+				Row {
+					OutlinedTextField(
+						value = event.value,
+						onValueChange = { new: String ->
+							if (new.matches(Regex("[0-9]{0,6}"))) {
+								event.value = new
+								scope.launch {
+									update()
+								}
+							}
+						},
+						label = { Text("Event ID") },
+						modifier = Modifier
+							.padding(horizontal = 16.dp)
+							.fillMaxWidth(0.6f),
+						keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+					)
+					OutlinedTextField(
+						value = division.value,
+						onValueChange = { new: String ->
+							if (new.matches(Regex("[0-9]{0,6}"))) {
+								division.value = new
+								scope.launch {
+									update()
+								}
+							}
+						},
+						label = { Text("Division ID") },
+						modifier = Modifier
+							.padding(horizontal = 16.dp)
+							.fillMaxWidth(),
+						keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+					)
+				}
+				if (matches.first() == null) {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Type in an event and division ID to get the matches from it")
+					}
+				} else if (matches.first() == "not found") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Event could not be found")
+					}
+				} else if (matches.first() == "div not found") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("Division could not be found or no matches are posted")
+					}
+				} else if (matches.first() == "loading") {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						CircularProgressIndicator()
+					}
+				} else {
+					Column(modifier = Modifier
+						.padding(top = 16.dp)
+						.verticalScroll(rememberScrollState())) {
+						matches.forEachIndexed { index, match ->
+							match as? JsonObject ?: return@forEachIndexed
+							val redPoints = ((match["alliances"] as JsonArray<*>)[1] as JsonObject)["score"] as? Int ?: -1
+							val bluePoints = ((match["alliances"] as JsonArray<*>)[0] as JsonObject)["score"] as? Int ?: -1
+							Text(
+								match["name"] as String,
+								modifier = Modifier.fillMaxWidth(),
+								textAlign = TextAlign.Center
+							)
+							FlowRow(
+								horizontalArrangement = Arrangement.SpaceEvenly,
+								modifier = Modifier.fillMaxWidth()
+							) {
+								Box(
+									modifier = Modifier.background(Color(0xBFCB0000), RoundedCornerShape(4.dp))
+								) {
+									Column(
+										modifier = Modifier.padding(4.dp)
+									) {
+										val team1 = ((((match["alliances"] as JsonArray<*>)[1] as JsonObject)["teams"] as JsonArray<*>)[0] as JsonObject)["team"] as JsonObject
+										val team2 = ((((match["alliances"] as JsonArray<*>)[1] as JsonObject)["teams"] as JsonArray<*>)[1] as JsonObject)["team"] as JsonObject
+										Text(
+											team1["name"] as String,
+											modifier = Modifier.align(Alignment.CenterHorizontally),
+											textDecoration = if (redPoints > bluePoints) TextDecoration.Underline else TextDecoration.None
+										)
+										Text(
+											team2["name"] as String,
+											modifier = Modifier.align(Alignment.CenterHorizontally),
+											textDecoration = if (redPoints > bluePoints) TextDecoration.Underline else TextDecoration.None
+										)
+									}
+								}
+								if (redPoints == -1 || bluePoints == -1) {
+									val time = Instant.parse(match["started"] as String).atZone(ZoneId.systemDefault())
+									Text("${time.hour}:${time.minute}")
+								} else {
+									Text(
+										redPoints.toString(),
+										style = MaterialTheme.typography.titleLarge,
+										modifier = Modifier.align(Alignment.CenterVertically),
+										textDecoration = if (redPoints > bluePoints) TextDecoration.Underline else TextDecoration.None
+									)
+									Text(
+										bluePoints.toString(),
+										style = MaterialTheme.typography.titleLarge,
+										modifier = Modifier.align(Alignment.CenterVertically),
+										textDecoration = if (bluePoints > redPoints) TextDecoration.Underline else TextDecoration.None
+									)
+								}
+								Box(
+									modifier = Modifier.background(Color(0xBF0000CB), RoundedCornerShape(4.dp))
+								) {
+									Column(
+										modifier = Modifier.padding(4.dp)
+									) {
+										val team1 = ((((match["alliances"] as JsonArray<*>)[0] as JsonObject)["teams"] as JsonArray<*>)[0] as JsonObject)["team"] as JsonObject
+										val team2 = ((((match["alliances"] as JsonArray<*>)[0] as JsonObject)["teams"] as JsonArray<*>)[1] as JsonObject)["team"] as JsonObject
+										Text(
+											team1["name"] as String,
+											modifier = Modifier.align(Alignment.CenterHorizontally),
+											textDecoration = if (bluePoints > redPoints) TextDecoration.Underline else TextDecoration.None
+										)
+										Text(
+											team2["name"] as String,
+											modifier = Modifier.align(Alignment.CenterHorizontally),
+											textDecoration = if (bluePoints > redPoints) TextDecoration.Underline else TextDecoration.None
+										)
+									}
+								}
+							}
+							val field = match["field"] as? String ?: "UNKNOWN FIELD"
+							Text(
+								"$field${if ("field" !in field.lowercase()) " Field" else ""}",
+								modifier = Modifier.fillMaxWidth(),
+								textAlign = TextAlign.Center
+							)
+							if (index + 1 != matches.size) {
+								HorizontalDivider(modifier = Modifier.padding(8.dp))
 							}
 						}
 					}
