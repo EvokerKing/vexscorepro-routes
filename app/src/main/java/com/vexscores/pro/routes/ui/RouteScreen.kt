@@ -1348,6 +1348,99 @@ fun RouteScreen(controller: NavController, item: String) {
 					}
 				}
 			}
+		} else if (item == "Teams List") {
+			val list = remember { mutableStateListOf<Map<String, Any?>?>(null) }
+			suspend fun update() {
+				list.clear()
+				list += null
+				var res: HttpResponse
+				try {
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/teams/list?pages=1")
+				} catch (_: HttpRequestTimeoutException) {
+					update()
+					return
+				}
+				val data = Parser.default().parse(StringBuilder(res.body<String>())) as JsonArray<*>
+				list.clear()
+				data.forEach {
+					list += (it as JsonObject).toMap()
+				}
+			}
+			LaunchedEffect(Unit) {
+				update()
+			}
+			Column(modifier = Modifier
+				.fillMaxSize()
+				.padding(innerPadding)) {
+				if (list.isEmpty()) {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						Text("No results returned")
+					}
+				} else if (list.first() == null) {
+					FlowColumn(
+						verticalArrangement = Arrangement.Center,
+						horizontalArrangement = Arrangement.Center,
+						modifier = Modifier
+							.fillMaxSize()
+							.padding(innerPadding)
+					) {
+						CircularProgressIndicator()
+					}
+				} else {
+					Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+						list.forEach { team ->
+							ElevatedCard(modifier = Modifier
+								.fillMaxWidth()
+								.padding(8.dp)) {
+								Text(
+									"${team!!["number"]} - ${team["team_name"]}",
+									style = MaterialTheme.typography.titleLarge,
+									modifier = Modifier.padding(start = 8.dp, top = 8.dp)
+								)
+								val name = if ((team["robot_name"] as? String)?.isEmpty() == false) team["robot_name"] as String else null
+								Text(
+									name ?: "No robot name",
+									style = MaterialTheme.typography.titleMedium,
+									modifier = Modifier.padding(start = 8.dp)
+								)
+								if (team["organization"] as? String != null) {
+									Text(
+										team["organization"] as String,
+										style = MaterialTheme.typography.titleMedium,
+										modifier = Modifier.padding(start = 8.dp)
+									)
+								}
+								Text(
+									(team["program"] as Map<*, *>)["name"] as String,
+									style = MaterialTheme.typography.titleSmall,
+									modifier = Modifier.padding(start = 8.dp)
+								)
+								Text(
+									team["grade"] as String,
+									style = MaterialTheme.typography.titleSmall,
+									modifier = Modifier.padding(start = 8.dp)
+								)
+								Text(
+									if (team["registered"] as Boolean) "Registered" else "Not registered",
+									style = MaterialTheme.typography.titleSmall,
+									modifier = Modifier.padding(start = 8.dp)
+								)
+								Text(
+									"${(team["location"] as Map<*, *>)["city"]}, ${(team["location"] as Map<*, *>)["country"]} ${(team["location"] as Map<*, *>)["postcode"]}",
+									style = MaterialTheme.typography.titleSmall,
+									modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+								)
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 }
