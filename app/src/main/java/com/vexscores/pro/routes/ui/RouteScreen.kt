@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,6 +32,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -1349,13 +1352,29 @@ fun RouteScreen(controller: NavController, item: String) {
 				}
 			}
 		} else if (item == "Teams List") {
+			var filters = remember { mutableStateListOf("", "0", "", "") }
 			val list = remember { mutableStateListOf<Map<String, Any?>?>(null) }
+			val programs = remember { mutableStateListOf<String?>(null) }
+			val grades = listOf("College", "High School", "Middle School", "Elementary School")
 			suspend fun update() {
 				list.clear()
 				list += null
+				var searchParams = ""
+				if (!filters[0].isEmpty()) {
+					searchParams += "&event=${filters[0]}"
+				}
+				if (filters[1] == "1") {
+					searchParams += "&registered=true"
+				}
+				if (!filters[2].isEmpty()) {
+					searchParams += "&program=${filters[2]}"
+				}
+				if (!filters[3].isEmpty()) {
+					searchParams += "&grade=${URLEncoder.encode(filters[3], "UTF-8")}"
+				}
 				var res: HttpResponse
 				try {
-					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/teams/list?pages=1")
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/teams/list?pages=1$searchParams")
 				} catch (_: HttpRequestTimeoutException) {
 					update()
 					return
@@ -1365,13 +1384,248 @@ fun RouteScreen(controller: NavController, item: String) {
 				data.forEach {
 					list += (it as JsonObject).toMap()
 				}
+				try {
+					res = HttpClient(CIO).get("https://vexscorepro.onrender.com/api/programs")
+				} catch (_: HttpRequestTimeoutException) {
+					update()
+					return
+				}
+				val programData = Parser.default().parse(StringBuilder(res.body<String>())) as JsonArray<*>
+				programs.clear()
+				programData.forEach {
+					var name = ((it as JsonObject).toMap()["abbr"]!! as String)
+					if (name !in programs) {
+						programs += name
+					}
+				}
 			}
 			LaunchedEffect(Unit) {
 				update()
 			}
+			var showEventDialog = remember { mutableStateOf(false) }
+			var showProgramMenu = remember { mutableStateOf(false) }
+			var showGradeMenu = remember { mutableStateOf(false) }
 			Column(modifier = Modifier
 				.fillMaxSize()
 				.padding(innerPadding)) {
+				Row(modifier = Modifier
+					.padding(4.dp)
+					.horizontalScroll(rememberScrollState())) {
+					InputChip(
+						onClick = {
+							showEventDialog.value = true
+						},
+						label = { Text("Event ID${if (!filters[0].isEmpty()) ": ${filters[0]}" else ""}") },
+						selected = !filters[0].isEmpty(),
+						trailingIcon = {
+							if (!filters[0].isEmpty()) {
+								IconButton(
+									onClick = {
+										filters[0] = ""
+										scope.launch {
+											update()
+										}
+									},
+									modifier = Modifier.size(InputChipDefaults.IconSize)
+								) {
+									Icon(Icons.Rounded.Clear, "Clear")
+								}
+							}
+						},
+						modifier = Modifier.padding(4.dp)
+					)
+					FilterChip(
+						onClick = {
+							if (filters[1] == "0") {
+								filters[1] = "1"
+								scope.launch {
+									update()
+								}
+							} else {
+								filters[1] = "0"
+								scope.launch {
+									update()
+								}
+							}
+						},
+						label = { Text("Registered Only") },
+						selected = filters[1] == "1",
+						leadingIcon = if (filters[1] == "1") {
+							{
+								Icon(
+									imageVector = Icons.Rounded.Done,
+									contentDescription = "Selected",
+									modifier = Modifier.size(FilterChipDefaults.IconSize)
+								)
+							}
+						} else {
+							null
+						},
+						modifier = Modifier.padding(4.dp)
+					)
+					Box {
+						InputChip(
+							onClick = {
+								showProgramMenu.value = true
+							},
+							label = { Text("Program${if (!filters[2].isEmpty()) ": ${filters[2]}" else ""}") },
+							selected = !filters[2].isEmpty(),
+							trailingIcon = {
+								if (!filters[2].isEmpty()) {
+									IconButton(
+										onClick = {
+											filters[2] = ""
+											scope.launch {
+												update()
+											}
+										},
+										modifier = Modifier.size(InputChipDefaults.IconSize)
+									) {
+										Icon(Icons.Rounded.Clear, "Clear")
+									}
+								}
+							},
+							modifier = Modifier.padding(4.dp)
+						)
+						DropdownMenu(
+							expanded = showProgramMenu.value,
+							onDismissRequest = { showProgramMenu.value = false },
+							modifier = Modifier
+								.width(300.dp)
+						) {
+							if (programs.first() == null) {
+								FlowColumn(
+									modifier = Modifier.fillMaxSize(),
+									horizontalArrangement = Arrangement.Center,
+									verticalArrangement = Arrangement.Center
+								) {
+									CircularProgressIndicator()
+								}
+							} else {
+								programs.forEach {
+									DropdownMenuItem(
+										text = { Text(it!!) },
+										onClick = {
+											filters[2] = it!!
+											scope.launch {
+												update()
+											}
+											showProgramMenu.value = false
+										}
+									)
+								}
+							}
+						}
+					}
+					Box {
+						InputChip(
+							onClick = {
+								showGradeMenu.value = true
+							},
+							label = { Text("Grade${if (!filters[3].isEmpty()) ": ${filters[3]}" else ""}") },
+							selected = !filters[3].isEmpty(),
+							trailingIcon = {
+								if (!filters[3].isEmpty()) {
+									IconButton(
+										onClick = {
+											filters[3] = ""
+											scope.launch {
+												update()
+											}
+										},
+										modifier = Modifier.size(InputChipDefaults.IconSize)
+									) {
+										Icon(Icons.Rounded.Clear, "Clear")
+									}
+								}
+							},
+							modifier = Modifier.padding(4.dp)
+						)
+						DropdownMenu(
+							expanded = showGradeMenu.value,
+							onDismissRequest = { showGradeMenu.value = false },
+							modifier = Modifier
+								.width(300.dp)
+						) {
+							grades.forEach {
+								DropdownMenuItem(
+									text = { Text(it) },
+									onClick = {
+										filters[3] = it
+										scope.launch {
+											update()
+										}
+										showGradeMenu.value = false
+									}
+								)
+							}
+						}
+					}
+				}
+				if (showEventDialog.value) {
+					var current = remember { mutableStateOf(filters[0]) }
+					Dialog(
+						onDismissRequest = {
+							showEventDialog.value = false
+						}
+					) {
+						Card(
+							modifier = Modifier
+								.fillMaxWidth()
+								.height(200.dp),
+							shape = RoundedCornerShape(16.dp)
+						) {
+							FlowColumn(
+								modifier = Modifier.fillMaxSize(),
+								verticalArrangement = Arrangement.SpaceEvenly
+							) {
+								Text(
+									"Enter Event ID",
+									modifier = Modifier.align(Alignment.CenterHorizontally),
+									style = MaterialTheme.typography.headlineSmall
+								)
+								OutlinedTextField(
+									value = current.value,
+									onValueChange = { new: String ->
+										if (new.matches(Regex("[0-9]{0,6}"))) {
+											current.value = new.uppercase()
+										}
+									},
+									label = { Text("Event ID") },
+									modifier = Modifier
+										.padding(horizontal = 16.dp)
+										.fillMaxWidth(),
+									keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+								)
+								Row(
+									modifier = Modifier
+										.align(Alignment.End)
+										.padding(horizontal = 16.dp)
+								) {
+									TextButton(
+										onClick = {
+											showEventDialog.value = false
+										}
+									) {
+										Text("Dismiss")
+									}
+									TextButton(
+										onClick = {
+											filters[0] = current.value
+											scope.launch {
+												update()
+											}
+											showEventDialog.value = false
+										},
+										enabled = current.value.matches(Regex("^([0-9]{4,5})$"))
+									) {
+										Text("Confirm")
+									}
+								}
+							}
+						}
+					}
+				}
 				if (list.isEmpty()) {
 					FlowColumn(
 						verticalArrangement = Arrangement.Center,
